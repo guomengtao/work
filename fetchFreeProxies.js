@@ -1,13 +1,14 @@
-// fetchFreeProxies.js
+// fetchFreeProxiesAuto.js
 import fs from 'fs';
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 
-// 多个公开免费订阅源（你可以按需增加）
-const SUBS_URLS = [
-  'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/Proxies/Proxy.yaml',
-  'https://raw.githubusercontent.com/MetaCubeX/Free-Proxy/main/free.yaml',
-];
+const GITHUB_API = 'https://api.github.com/search/code?q=clash+yaml+filename:clash.yaml+path:Proxies+in:path&per_page=50';
+
+// 过滤端口为纯数字的节点
+function filterProxies(proxies) {
+  return proxies.filter(p => /^\d+$/.test(String(p.port)));
+}
 
 async function fetchYAML(url) {
   const res = await fetch(url);
@@ -15,45 +16,56 @@ async function fetchYAML(url) {
   return await res.text();
 }
 
-function mergeProxies(yamlContents) {
-  let allProxies = [];
-  for (const y of yamlContents) {
-    try {
-      const doc = yaml.load(y);
-      if (doc && doc.proxies) {
-        // 只保留端口为纯数字的节点
-        const filtered = doc.proxies.filter(p => /^\d+$/.test(String(p.port)));
-        allProxies = allProxies.concat(filtered);
-      }
-    } catch (e) {
-      console.warn('⚠️ YAML parse error, skip this source', e);
-    }
-  }
-  return allProxies;
+async function fetchGitHubYAMLLinks() {
+  const res = await fetch(GITHUB_API);
+  if (!res.ok) throw new Error('GitHub API fetch failed');
+  const data = await res.json();
+  // GitHub API 返回 items，每个 item 有 html_url 或 raw_url 可直接抓取
+  const urls = data.items
+    .map(item => item.html_url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/'));
+  return urls;
 }
 
 async function main() {
+  console.log('🔍 获取 GitHub 免费 Clash/YAML 链接...');
+  let urls = [];
   try {
-    const yamls = [];
-    for (const url of SUBS_URLS) {
-      console.log(`Fetching ${url}`);
-      const y = await fetchYAML(url);
-      yamls.push(y);
-    }
-
-    const proxies = mergeProxies(yamls);
-    if (proxies.length === 0) {
-      throw new Error('No valid proxies found!');
-    }
-
-    const finalYAML = yaml.dump({ proxies });
-    fs.mkdirSync('clashx', { recursive: true });
-    fs.writeFileSync('clashx/config.yaml', finalYAML, 'utf8');
-    console.log(`✅ config.yaml updated, ${proxies.length} proxies`);
+    urls = await fetchGitHubYAMLLinks();
   } catch (err) {
-    console.error('❌ 生成失败:', err);
+    console.error('❌ 获取 YAML 链接失败:', err.message);
+  }
+
+  if (urls.length === 0) {
+    console.error('❌ 没有获取到订阅链接');
     process.exit(1);
   }
+
+  const allProxies = [];
+  for (const url of urls) {
+    try {
+      console.log(`Fetching ${url} ...`);
+      const text = await fetchYAML(url);
+      const data = yaml.load(text);
+      if (!data || !data.proxies) continue;
+      const validProxies = filterProxies(data.proxies);
+      allProxies.push(...validProxies);
+    } catch (err) {
+      console.warn(`⚠️ ${url} 抓取失败:`, err.message);
+    }
+  }
+
+  if (allProxies.length === 0) {
+    console.error('❌ 没有可用节点');
+    process.exit(1);
+  }
+
+  const output = yaml.dump({ proxies: allProxies }, { lineWidth: -1 });
+  fs.mkdirSync('clashx', { recursive: true });
+  fs.writeFileSync('clashx/config.yaml', output, 'utf8');
+  console.log('✅ clashx/config.yaml 已生成，节点数量:', allProxies.length);
 }
 
-main();
+main().catch(err => {
+  console.error('❌ 脚本执行失败:', err);
+  process.exit(1);
+});
