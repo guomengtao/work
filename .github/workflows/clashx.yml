@@ -1,6 +1,5 @@
 name: Update ClashX YAML
 
-# 定时每天凌晨 2 点执行，也可以手动触发
 on:
   schedule:
     - cron: "0 2 * * *"
@@ -14,23 +13,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: true  # 使用默认 GITHUB_TOKEN 可以推回 main
+          persist-credentials: true
 
-      # 2️⃣ 设置 Node.js（可选，如果抓取脚本用 Node）
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-
-      # 3️⃣ 安装依赖（可选）
-      - name: Install dependencies
-        run: npm install
-
-      # 4️⃣ 生成 YAML 文件
+      # 2️⃣ 生成 YAML 文件
       - name: Generate ClashX YAML
         run: |
           mkdir -p clashx
-          # 这里简单示例，实际可以用脚本抓取最新免费节点
           cat > clashx/config.yaml <<EOL
           # Minimal ClashX YAML example
           proxies:
@@ -50,7 +38,7 @@ jobs:
                 - FreeProxy2
           EOL
 
-      # 5️⃣ 提交到 main
+      # 3️⃣ 提交到 main
       - name: Commit and push
         run: |
           git config user.name "github-actions"
