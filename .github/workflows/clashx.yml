@@ -1,46 +1,60 @@
 name: Update ClashX YAML
 
-# 定时每天更新，也可自行修改 cron
+# 定时每天凌晨 2 点执行，也可以手动触发
 on:
   schedule:
-    - cron: '0 0 * * *'   # 每天 UTC 0 点执行一次
-  workflow_dispatch:       # 手动触发
+    - cron: "0 2 * * *"
+  workflow_dispatch:
 
 jobs:
-  update_yaml:
+  update-clashx:
     runs-on: ubuntu-latest
-
     steps:
-    # 1️⃣ Checkout 仓库（允许写权限）
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        persist-credentials: true   # 确保 GITHUB_TOKEN 可以 push
+      # 1️⃣ 检出仓库
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # 使用默认 GITHUB_TOKEN 可以推回 main
 
-    # 2️⃣ 设置 Node.js（可选，如果你用 JS 脚本生成 YAML）
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+      # 2️⃣ 设置 Node.js（可选，如果抓取脚本用 Node）
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
 
-    # 3️⃣ 安装依赖（如果有）
-    - name: Install dependencies
-      run: npm install
+      # 3️⃣ 安装依赖（可选）
+      - name: Install dependencies
+        run: npm install
 
-    # 4️⃣ 生成 ClashX YAML
-    - name: Generate ClashX YAML
-      run: |
-        mkdir -p clashx
-        # 这里用 curl 示例抓取免费节点并生成 YAML
-        # 你可以替换成你自己的抓取/处理脚本
-        curl -s https://example.com/free-proxies.yaml > clashx/config.yaml
-        echo "Generated clashx/config.yaml"
+      # 4️⃣ 生成 YAML 文件
+      - name: Generate ClashX YAML
+        run: |
+          mkdir -p clashx
+          # 这里简单示例，实际可以用脚本抓取最新免费节点
+          cat > clashx/config.yaml <<EOL
+          # Minimal ClashX YAML example
+          proxies:
+            - name: "FreeProxy1"
+              type: socks5
+              server: 1.2.3.4
+              port: 1080
+            - name: "FreeProxy2"
+              type: socks5
+              server: 5.6.7.8
+              port: 1080
+          proxy-groups:
+            - name: "Auto"
+              type: select
+              proxies:
+                - FreeProxy1
+                - FreeProxy2
+          EOL
 
-    # 5️⃣ 提交并 push 到 main
-    - name: Commit and push
-      run: |
-        git config user.name "github-actions"
-        git config user.email "github-actions@users.noreply.github.com"
-        git add clashx/config.yaml
-        git commit -m "Update ClashX YAML with free proxies" || echo "No changes to commit"
-        git push origin main
+      # 5️⃣ 提交到 main
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add clashx/config.yaml
+          git commit -m "Update ClashX YAML with free proxies [ci skip]" || echo "No changes to commit"
+          git push origin main
