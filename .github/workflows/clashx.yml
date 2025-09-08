@@ -1,48 +1,81 @@
-name: Update ClashX YAML
+name: Update ClashX Free Nodes
 
 on:
   schedule:
-    - cron: "0 2 * * *"
-  workflow_dispatch:
+    # 每天 8:00 UTC 自动运行（可自行修改）
+    - cron: '0 8 * * *'
+  workflow_dispatch:  # 手动触发
 
 jobs:
   update-clashx:
     runs-on: ubuntu-latest
+
     steps:
-      # 1️⃣ 检出仓库
+      # 1️⃣ 获取仓库代码
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
+          persist-credentials: false  # 使用 PAT 来 push
 
-      # 2️⃣ 生成 YAML 文件
-      - name: Generate ClashX YAML
+      # 2️⃣ 设置 Node.js（方便抓取和处理数据）
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      # 3️⃣ 安装依赖（如果你用 axios/fetch 等）
+      - name: Install dependencies
         run: |
-          mkdir -p clashx
-          cat > clashx/config.yaml <<EOL
-          # Minimal ClashX YAML example
-          proxies:
-            - name: "FreeProxy1"
-              type: socks5
-              server: 1.2.3.4
-              port: 1080
-            - name: "FreeProxy2"
-              type: socks5
-              server: 5.6.7.8
-              port: 1080
-          proxy-groups:
-            - name: "Auto"
-              type: select
-              proxies:
-                - FreeProxy1
-                - FreeProxy2
-          EOL
+          npm init -y
+          npm install axios js-yaml
 
-      # 3️⃣ 提交到 main
-      - name: Commit and push
+      # 4️⃣ 抓取免费节点并生成 YAML
+      - name: Fetch free ClashX nodes and generate YAML
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const axios = require('axios');
+          const yaml = require('js-yaml');
+
+          // 这里可以替换成你常用的免费节点订阅 URL
+          const freeNodes = [
+            'https://example.com/free1.yaml',
+            'https://example.com/free2.yaml'
+          ];
+
+          async function fetchNodes() {
+            const proxies = [];
+            for (const url of freeNodes) {
+              try {
+                const res = await axios.get(url);
+                proxies.push(res.data);
+              } catch (e) {
+                console.error('抓取失败:', url, e.message);
+              }
+            }
+            return proxies.join('\n');
+          }
+
+          (async () => {
+            const content = await fetchNodes();
+            // 保存到 clashx/config.yaml
+            fs.mkdirSync('clashx', { recursive: true });
+            fs.writeFileSync('clashx/config.yaml', content, 'utf-8');
+            console.log('ClashX YAML 已更新');
+          })();
+          EOF
+
+      # 5️⃣ 配置 Git 用户
+      - name: Configure Git
         run: |
           git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
+          git config user.email "github-actions@github.com"
+
+      # 6️⃣ Commit & Push
+      - name: Commit and Push
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
           git add clashx/config.yaml
           git commit -m "Update ClashX YAML with free proxies [ci skip]" || echo "No changes to commit"
-          git push origin main
+          git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }} HEAD:main
