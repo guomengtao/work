@@ -1,78 +1,47 @@
-name: Update ClashX Free Nodes
+name: Update ClashX YAML
 
+# 定时执行（每天凌晨1点）
 on:
   schedule:
-    # 每天 8:00 UTC 自动运行（可自行修改）
-    - cron: '0 8 * * *'
-  workflow_dispatch:  # 手动触发
+    - cron: '0 1 * * *'
+  workflow_dispatch: # 支持手动触发
 
 jobs:
-  update-clashx:
+  update-clashx-yaml:
     runs-on: ubuntu-latest
-
     steps:
-      # 1️⃣ 获取仓库代码
+      # 1. Checkout 仓库
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: false  # 使用 PAT 来 push
+          fetch-depth: 0
 
-      # 2️⃣ 设置 Node.js（方便抓取和处理数据）
+      # 2. 设置 Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
 
-      # 3️⃣ 安装依赖（如果你用 axios/fetch 等）
+      # 3. 安装依赖（如果有 package.json，可选）
       - name: Install dependencies
         run: |
-          npm init -y
-          npm install axios js-yaml
+          npm install
 
-      # 4️⃣ 抓取免费节点并生成 YAML
-      - name: Fetch free ClashX nodes and generate YAML
+      # 4. 抓取免费节点并生成 YAML
+      - name: Generate ClashX YAML
         run: |
-          node <<'EOF'
-          const fs = require('fs');
-          const axios = require('axios');
-          const yaml = require('js-yaml');
+          node fetchFreeProxies.js
+          # 假设 fetchFreeProxies.js 输出到 clashx/config.yaml
+          cat clashx/config.yaml
 
-          // 这里可以替换成你常用的免费节点订阅 URL
-          const freeNodes = [
-            'https://example.com/free1.yaml',
-            'https://example.com/free2.yaml'
-          ];
-
-          async function fetchNodes() {
-            const proxies = [];
-            for (const url of freeNodes) {
-              try {
-                const res = await axios.get(url);
-                proxies.push(res.data);
-              } catch (e) {
-                console.error('抓取失败:', url, e.message);
-              }
-            }
-            return proxies.join('\n');
-          }
-
-          (async () => {
-            const content = await fetchNodes();
-            // 保存到 clashx/config.yaml
-            fs.mkdirSync('clashx', { recursive: true });
-            fs.writeFileSync('clashx/config.yaml', content, 'utf-8');
-            console.log('ClashX YAML 已更新');
-          })();
-          EOF
-
-      # 5️⃣ 配置 Git 用户
+      # 5. 配置 Git 用户
       - name: Configure Git
         run: |
           git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          git config user.email "github-actions@users.noreply.github.com"
 
-      # 6️⃣ Commit & Push
-      - name: Commit and Push
+      # 6. 提交并推送到 main 分支（使用 PAT_TOKEN）
+      - name: Commit and push YAML
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
