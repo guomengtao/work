@@ -1,40 +1,63 @@
-/**
- * fetchFreeProxies.js
- * 自动抓取免费 ClashX 节点并生成 YAML
- * 使用方法：
- *  node fetchFreeProxies.js
- */
-
+// fetchFreeProxies.js
 import fs from 'fs';
-import https from 'https';
-import { Buffer } from 'buffer';
+import fetch from 'node-fetch';
+import yaml from 'js-yaml';
 
-// 保存 YAML 的文件路径
-const outputPath = 'clashx/config.yaml';
-
-// 示例免费节点（你可以替换成真实抓取逻辑）
-const freeNodes = [
-  { name: 'Node1', type: 'socks5', server: '1.2.3.4', port: 1080 },
-  { name: 'Node2', type: 'socks5', server: '5.6.7.8', port: 1080 },
-  // 可以增加抓取逻辑，例如从 free proxy 网站抓取
+// 免费 Clash 节点订阅 URL（示例）
+const PROXY_LIST_URLS = [
+  'https://raw.githubusercontent.com/anaer/Sub/main/clash.yaml',
+  'https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/clash.yml'
 ];
 
-// 生成 YAML 内容
-function generateYaml(nodes) {
-  let yaml = 'proxies:\n';
-  for (const n of nodes) {
-    yaml += `  - name: ${n.name}\n`;
-    yaml += `    type: ${n.type}\n`;
-    yaml += `    server: ${n.server}\n`;
-    yaml += `    port: ${n.port}\n`;
+// 主函数
+async function fetchProxies() {
+  const proxies = [];
+
+  for (const url of PROXY_LIST_URLS) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`⚠️ 无法访问 ${url}`);
+        continue;
+      }
+      const yamlText = await res.text();
+      const data = yaml.load(yamlText);
+
+      // 判断是否有 proxies 字段
+      if (data?.proxies && Array.isArray(data.proxies)) {
+        proxies.push(...data.proxies);
+      }
+    } catch (err) {
+      console.error(`❌ 获取 ${url} 出错:`, err);
+    }
   }
-  return yaml;
+
+  if (proxies.length === 0) {
+    console.error('❌ 没有获取到可用节点');
+    process.exit(1);
+  }
+
+  // 生成 ClashX YAML 配置
+  const yamlContent = generateClashConfig(proxies);
+  fs.mkdirSync('clashx', { recursive: true });
+  fs.writeFileSync('clashx/config.yaml', yamlContent, 'utf8');
+  console.log('✅ clashx/config.yaml 已生成');
 }
 
-// 确保目录存在
-fs.mkdirSync('clashx', { recursive: true });
+// 生成 ClashX YAML 内容，只保留必要字段
+function generateClashConfig(proxies) {
+  const filtered = proxies.map(p => ({
+    name: p.name,
+    type: p.type,
+    server: p.server,
+    port: p.port
+  }));
 
-// 写入 YAML 文件
-fs.writeFileSync(outputPath, generateYaml(freeNodes), 'utf-8');
+  return yaml.dump({ proxies: filtered }, { lineWidth: -1 });
+}
 
-console.log(`✅ YAML 已生成: ${outputPath}`);
+// 执行
+fetchProxies().catch(err => {
+  console.error('❌ 更新失败:', err);
+  process.exit(1);
+});
