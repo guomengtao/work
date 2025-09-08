@@ -1,0 +1,52 @@
+name: Generate ClashX YAML with Free Proxies
+
+on:
+  schedule:
+    - cron: '0 * * * *' # 每小时执行一次
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  generate-config:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Fetch free proxy nodes
+        run: |
+          curl -s https://raw.githubusercontent.com/SnapdragonLee/SystemProxy/master/dist/clash_config.yaml -o clash_config.yaml
+
+      - name: Generate ClashX YAML
+        run: |
+          cat > clashx_config.yaml <<EOL
+          port: 7890
+          socks-port: 7891
+          allow-lan: false
+          mode: Rule
+          proxies:
+            - name: "FreeProxyNode"
+              type: ss
+              server: example.com
+              port: 443
+              cipher: aes-128-gcm
+              password: password123
+          proxy-groups:
+            - name: "Auto"
+              type: select
+              proxies:
+                - "FreeProxyNode"
+          rules:
+            - MATCH,Auto
+          EOL
+
+      - name: Commit and push to gh-pages
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout -B gh-pages
+          mkdir -p clashx
+          mv clashx_config.yaml clashx/config.yaml
+          git add clashx/config.yaml
+          git commit -m "Update ClashX YAML with free proxies"
+          git push -f origin gh-pages
