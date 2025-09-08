@@ -1,63 +1,67 @@
-// fetchFreeProxies.js
 import fs from 'fs';
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 
-// 免费 Clash 节点订阅 URL（示例）
-const PROXY_LIST_URLS = [
-  'https://raw.githubusercontent.com/anaer/Sub/main/clash.yaml',
-  'https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/clash.yml'
+const SUBS_URLS = [
+  'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/Proxies/Free.yaml',
+  'https://raw.githubusercontent.com/MetaCubeX/ClashNode/main/free.yaml'
+  // 可以根据需要增加更多公开订阅 URL
 ];
 
-// 主函数
-async function fetchProxies() {
-  const proxies = [];
+const OUTPUT_PATH = 'clashx/config.yaml';
 
-  for (const url of PROXY_LIST_URLS) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        console.warn(`⚠️ 无法访问 ${url}`);
-        continue;
-      }
-      const yamlText = await res.text();
-      const data = yaml.load(yamlText);
+async function fetchYAML(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch failed: ${url} Status: ${res.status}`);
+  return await res.text();
+}
 
-      // 判断是否有 proxies 字段
-      if (data?.proxies && Array.isArray(data.proxies)) {
-        proxies.push(...data.proxies);
-      }
-    } catch (err) {
-      console.error(`❌ 获取 ${url} 出错:`, err);
+function mergeProxies(listOfYAMLs) {
+  let allProxies = [];
+  for (const y of listOfYAMLs) {
+    const doc = yaml.load(y);
+    if (doc && doc.proxies) {
+      allProxies = allProxies.concat(doc.proxies);
     }
   }
+  return allProxies;
+}
 
-  if (proxies.length === 0) {
-    console.error('❌ 没有获取到可用节点');
+function generateConfig(proxies) {
+  return yaml.dump({
+    proxies,
+    'proxy-groups': [
+      {
+        name: 'Auto',
+        type: 'select',
+        proxies: proxies.map(p => p.name)
+      }
+    ],
+    rules: ['MATCH,Auto']
+  });
+}
+
+async function main() {
+  try {
+    const yamlContents = [];
+    for (const url of SUBS_URLS) {
+      console.log('Fetching', url);
+      const content = await fetchYAML(url);
+      yamlContents.push(content);
+    }
+
+    const allProxies = mergeProxies(yamlContents);
+    if (allProxies.length === 0) throw new Error('No proxies found');
+
+    const finalYAML = generateConfig(allProxies);
+
+    fs.mkdirSync('clashx', { recursive: true });
+    fs.writeFileSync(OUTPUT_PATH, finalYAML, 'utf8');
+    console.log('✅ config.yaml 已生成，节点数量:', allProxies.length);
+  } catch (err) {
+    console.error('❌ 生成失败:', err);
     process.exit(1);
   }
-
-  // 生成 ClashX YAML 配置
-  const yamlContent = generateClashConfig(proxies);
-  fs.mkdirSync('clashx', { recursive: true });
-  fs.writeFileSync('clashx/config.yaml', yamlContent, 'utf8');
-  console.log('✅ clashx/config.yaml 已生成');
 }
 
-// 生成 ClashX YAML 内容，只保留必要字段
-function generateClashConfig(proxies) {
-  const filtered = proxies.map(p => ({
-    name: p.name,
-    type: p.type,
-    server: p.server,
-    port: p.port
-  }));
-
-  return yaml.dump({ proxies: filtered }, { lineWidth: -1 });
-}
-
-// 执行
-fetchProxies().catch(err => {
-  console.error('❌ 更新失败:', err);
-  process.exit(1);
-});
+main();
