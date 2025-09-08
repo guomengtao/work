@@ -1,50 +1,63 @@
 name: Update ClashX YAML
 
-# 定时执行（每天凌晨1点）
 on:
   schedule:
-    - cron: '0 1 * * *'
-  workflow_dispatch: # 支持手动触发
+    - cron: '0 0 * * *'  # 每天 00:00 UTC 执行一次
+  workflow_dispatch:     # 手动触发
 
 jobs:
-  update-clashx-yaml:
+  update-clashx:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout 仓库
-      - name: Checkout repository
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: main
+          persist-credentials: false # 使用自定义 token
 
-      # 2. 设置 Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
 
-      # 3. 安装依赖（如果有 package.json，可选）
-      - name: Install dependencies
+      - name: Create fetchFreeProxies.js
         run: |
-          npm install
+          mkdir -p clashx
+          cat <<'EOF' > fetchFreeProxies.js
+          import fs from 'fs';
 
-      # 4. 抓取免费节点并生成 YAML
+          const outputPath = 'clashx/config.yaml';
+
+          const freeNodes = [
+            { name: 'Node1', type: 'socks5', server: '1.2.3.4', port: 1080 },
+            { name: 'Node2', type: 'socks5', server: '5.6.7.8', port: 1080 }
+          ];
+
+          function generateYaml(nodes) {
+            let yaml = 'proxies:\n';
+            for (const n of nodes) {
+              yaml += `  - name: ${n.name}\n`;
+              yaml += `    type: ${n.type}\n`;
+              yaml += `    server: ${n.server}\n`;
+              yaml += `    port: ${n.port}\n`;
+            }
+            return yaml;
+          }
+
+          fs.mkdirSync('clashx', { recursive: true });
+          fs.writeFileSync(outputPath, generateYaml(freeNodes), 'utf-8');
+          console.log(`✅ YAML 已生成: ${outputPath}`);
+          EOF
+
       - name: Generate ClashX YAML
-        run: |
-          node fetchFreeProxies.js
-          # 假设 fetchFreeProxies.js 输出到 clashx/config.yaml
-          cat clashx/config.yaml
+        run: node fetchFreeProxies.js
 
-      # 5. 配置 Git 用户
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-
-      # 6. 提交并推送到 main 分支（使用 PAT_TOKEN）
       - name: Commit and push YAML
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
           git add clashx/config.yaml
           git commit -m "Update ClashX YAML with free proxies [ci skip]" || echo "No changes to commit"
-          git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }} HEAD:main
+          git push https://${PAT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git main
