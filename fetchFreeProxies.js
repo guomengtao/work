@@ -3,9 +3,12 @@ import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 
 const SUBS_URLS = [
-  'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/Proxies/Free.yaml',
-  'https://raw.githubusercontent.com/MetaCubeX/ClashNode/main/free.yaml'
-  // 可以根据需要增加更多公开订阅 URL
+  'https://raw.githubusercontent.com/mfuu/v2ray/master/clash.yaml',
+  'https://raw.githubusercontent.com/anaer/Sub/main/clash.yaml',
+  'https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/clash.yml',
+  'https://cdn.jsdelivr.net/gh/vxiaov/free_proxies@main/clash/clash.provider.yaml',
+  'https://freenode.openrunner.net/uploads/20240617-clash.yaml',
+  'https://tt.vg/freeclash'
 ];
 
 const OUTPUT_PATH = 'clashx/config.yaml';
@@ -46,9 +49,15 @@ async function main() {
     const yamlContents = [];
     for (const url of SUBS_URLS) {
       console.log('Fetching', url);
-      const content = await fetchYAML(url);
-      yamlContents.push(content);
+      try {
+        const content = await fetchYAML(url);
+        yamlContents.push(content);
+      } catch (err) {
+        console.error(`Failed to fetch ${url}:`, err.message);
+      }
     }
+
+    if (yamlContents.length === 0) throw new Error('No valid YAML content fetched');
 
     const allProxies = mergeProxies(yamlContents);
     if (allProxies.length === 0) throw new Error('No proxies found');
